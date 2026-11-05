@@ -7,13 +7,17 @@ import {
   readConfirmPayload,
   readMeta,
 } from './lib/api'
+import { copyText, formatDuration, formatToolSummary } from './lib/format'
 import {
   loadConversations,
   loadSettings,
   saveConversations,
   saveSettings,
 } from './lib/storage'
-import type { Conversation, Settings, TimelineItem } from './lib/types'
+import { mapToolStatus, parseDonePayload, parseToolPayload } from './lib/toolEvent'
+import { CheckIcon, ClockIcon, CopyIcon, RefreshIcon } from './components/Icons'
+import { Markdown } from './components/Markdown'
+import type { Conversation, Settings, TimelineItem, ToolRun } from './lib/types'
 import './styles.css'
 
 const CHIPS = [
@@ -31,6 +35,13 @@ function titleFrom(text: string): string {
   return t.length > 28 ? `${t.slice(0, 28)}…` : t || '新对话'
 }
 
+function upsertTool(tools: ToolRun[], next: ToolRun): ToolRun[] {
+  const idx = tools.findIndex((t) => t.toolCallId === next.toolCallId)
+  if (idx < 0) return [...tools, next]
+  const merged = { ...tools[idx], ...next }
+  return [...tools.slice(0, idx), merged, ...tools.slice(idx + 1)]
+}
+
 export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings())
   const [conversations, setConversations] = useState<Conversation[]>(() =>
@@ -43,8 +54,11 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
-  const bottomRef = useRef<HTMLDivElement | null>(null)
+  const threadRef = useRef<HTMLDivElement | null>(null)
+  const runStartedAtRef = useRef<number | null>(null)
+  const streamConvIdRef = useRef<string | null>(null)
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
@@ -61,7 +75,10 @@ export default function App() {
   }, [settings])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    // 只滚消息容器，避免 scrollIntoView 把整页往下拽
+    const el = threadRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [active?.items, busy])
 
   function upsertConversation(next: Conversation) {
@@ -110,8 +127,70 @@ export default function App() {
       if (last && last.kind === kind) {
         return [...items.slice(0, -1), { ...last, text: last.text + chunk }]
       }
+      if (kind === 'answer') {
+        return [...items, { id: uid('answer'), kind: 'answer', text: chunk }]
+      }
       return [...items, { id: uid(kind), kind, text: chunk }]
     })
+  }
+
+  function applyToolEvent(conversationId: string, data: string) {
+    const payload = parseToolPayload(data)
+    if (!payload || !payload.toolCallId) return
+    patchItems(conversationId, (items) => {
+      const last = items[items.length - 1]
+      let activityId = last?.kind === 'activity' ? last.id : null
+      let tools: ToolRun[] = last?.kind === 'activity' ? [...last.tools] : []
+      const base: ToolRun = {
+        toolCallId: payload.toolCallId,
+        name: payload.name || 'tool',
+        status: 'running',
+        argsJson: payload.argsJson,
+      }
+      if (payload.phase === 'start') {
+        tools = upsertTool(tools, { ...base, status: 'running' })
+      } else if (payload.phase === 'args') {
+        const prev = tools.find((t) => t.toolCallId === payload.toolCallId)
+        tools = upsertTool(tools, {
+          ...base,
+          status: prev?.status ?? 'running',
+          durationMs: prev?.durationMs,
+          argsJson: payload.argsJson ?? prev?.argsJson,
+        })
+      } else {
+        tools = upsertTool(tools, {
+          ...base,
+          status: mapToolStatus(payload.status),
+          durationMs: payload.durationMs,
+          argsJson: payload.argsJson ?? tools.find((t) => t.toolCallId === payload.toolCallId)?.argsJson,
+        })
+      }
+      if (activityId) {
+        return items.map((it) =>
+          it.id === activityId && it.kind === 'activity' ? { ...it, tools } : it,
+        )
+      }
+      return [...items, { id: uid('activity'), kind: 'activity', tools }]
+    })
+  }
+
+  function applyDone(conversationId: string, data: string) {
+    const done = parseDonePayload(data)
+    const localElapsed =
+      runStartedAtRef.current != null ? Date.now() - runStartedAtRef.current : undefined
+    const elapsedMs = done.elapsedMs ?? localElapsed
+    patchItems(conversationId, (items) => {
+      const next = [...items]
+      for (let i = next.length - 1; i >= 0; i--) {
+        const it = next[i]
+        if (it.kind === 'answer') {
+          next[i] = { ...it, complete: true, elapsedMs }
+          break
+        }
+      }
+      return next
+    })
+    runStartedAtRef.current = null
   }
 
   async function handleStreamEvents(
@@ -119,54 +198,84 @@ export default function App() {
     event: string,
     data: string,
   ) {
+    const cid = streamConvIdRef.current || conversationId
     if (event === 'meta') {
       const meta = readMeta(data)
       if (meta.taskId) setTaskId(meta.taskId)
-      if (meta.conversationId && meta.conversationId !== conversationId) {
+      runStartedAtRef.current = Date.now()
+      if (meta.conversationId && meta.conversationId !== cid) {
+        streamConvIdRef.current = meta.conversationId
         setConversations((prev) =>
-          prev.map((c) =>
-            c.id === conversationId ? { ...c, id: meta.conversationId! } : c,
-          ),
+          prev.map((c) => (c.id === cid ? { ...c, id: meta.conversationId! } : c)),
         )
         setActiveId(meta.conversationId)
       }
       return
     }
     if (event === 'thinking') {
-      appendOrGrow(conversationId, 'thinking', asText(data))
+      appendOrGrow(cid, 'thinking', asText(data))
       return
     }
     if (event === 'answer') {
-      appendOrGrow(conversationId, 'answer', asText(data))
+      appendOrGrow(cid, 'answer', asText(data))
       return
     }
     if (event === 'tool') {
-      patchItems(conversationId, (items) => [
-        ...items,
-        { id: uid('tool'), kind: 'tool', text: asText(data) },
-      ])
+      applyToolEvent(cid, data)
       return
     }
     if (event === 'confirm') {
       const payload = readConfirmPayload(data)
       if (!payload) return
-      patchItems(conversationId, (items) => [
+      patchItems(cid, (items) => [
         ...items,
         {
           id: uid('confirm'),
           kind: 'confirm',
           taskId: payload.taskId,
-          conversationId: payload.conversationId || conversationId,
+          conversationId: payload.conversationId || cid,
           calls: payload.calls,
         },
       ])
       return
     }
     if (event === 'error') {
-      patchItems(conversationId, (items) => [
+      patchItems(cid, (items) => [
         ...items,
         { id: uid('error'), kind: 'error', text: asText(data) },
       ])
+      return
+    }
+    if (event === 'done') {
+      applyDone(cid, data)
+    }
+  }
+
+  async function runChat(conversationId: string, message: string) {
+    setBusy(true)
+    setError(null)
+    streamConvIdRef.current = conversationId
+    runStartedAtRef.current = Date.now()
+    const controller = new AbortController()
+    abortRef.current = controller
+    try {
+      await chatStream(
+        settings,
+        { message, conversationId },
+        (event, data) => {
+          void handleStreamEvents(conversationId, event, data)
+        },
+        controller.signal,
+      )
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') {
+        setError((e as Error).message || '请求失败')
+      }
+    } finally {
+      setBusy(false)
+      setTaskId(null)
+      abortRef.current = null
+      streamConvIdRef.current = null
     }
   }
 
@@ -177,7 +286,6 @@ export default function App() {
       setError('请先在左侧填入 RUNTIME API Key')
       return
     }
-    setError(null)
 
     let conv = active
     if (!conv) {
@@ -198,29 +306,39 @@ export default function App() {
     }
     upsertConversation(next)
     setDraft('')
-    setBusy(true)
+    await runChat(next.id, message)
+  }
 
-    const controller = new AbortController()
-    abortRef.current = controller
-    const localId = next.id
-
-    try {
-      await chatStream(
-        settings,
-        { message, conversationId: localId },
-        (event, data) => {
-          void handleStreamEvents(localId, event, data)
-        },
-        controller.signal,
-      )
-    } catch (e) {
-      if ((e as Error).name !== 'AbortError') {
-        setError((e as Error).message || '请求失败')
+  async function onRegenerate(answerId: string) {
+    if (!active || busy || !settings.apiKey.trim()) return
+    const items = active.items
+    const answerIdx = items.findIndex((it) => it.id === answerId && it.kind === 'answer')
+    if (answerIdx < 0) return
+    let userIdx = -1
+    for (let i = answerIdx - 1; i >= 0; i--) {
+      if (items[i].kind === 'user') {
+        userIdx = i
+        break
       }
-    } finally {
-      setBusy(false)
-      setTaskId(null)
-      abortRef.current = null
+    }
+    if (userIdx < 0) return
+    const userItem = items[userIdx]
+    if (userItem.kind !== 'user') return
+    const truncated = items.slice(0, userIdx + 1)
+    const next: Conversation = {
+      ...active,
+      items: truncated,
+      updatedAt: Date.now(),
+    }
+    upsertConversation(next)
+    await runChat(next.id, userItem.text)
+  }
+
+  async function onCopy(id: string, text: string) {
+    const ok = await copyText(text)
+    if (ok) {
+      setCopiedId(id)
+      window.setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 1200)
     }
   }
 
@@ -233,6 +351,8 @@ export default function App() {
     if (!settings.apiKey.trim() || busy) return
     setBusy(true)
     setError(null)
+    streamConvIdRef.current = conversationId
+    runStartedAtRef.current = Date.now()
     patchItems(conversationId, (items) =>
       items.map((it) =>
         it.id === itemId && it.kind === 'confirm'
@@ -260,6 +380,7 @@ export default function App() {
       setBusy(false)
       setTaskId(null)
       abortRef.current = null
+      streamConvIdRef.current = null
     }
   }
 
@@ -384,14 +505,24 @@ export default function App() {
           </div>
         ) : (
           <>
-            <div className="thread">
+            <div className="thread" ref={threadRef}>
               <div className="thread-inner">
                 {active?.items.map((item) => {
                   if (item.kind === 'user') {
                     return (
                       <div key={item.id} className="msg user">
-                        <span className="role">你</span>
                         <div className="bubble">{item.text}</div>
+                        <div className="msg-actions">
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            title={copiedId === item.id ? '已复制' : '复制'}
+                            aria-label={copiedId === item.id ? '已复制' : '复制'}
+                            onClick={() => void onCopy(item.id, item.text)}
+                          >
+                            {copiedId === item.id ? <CheckIcon /> : <CopyIcon />}
+                          </button>
+                        </div>
                       </div>
                     )
                   }
@@ -403,11 +534,56 @@ export default function App() {
                       </div>
                     )
                   }
-                  if (item.kind === 'tool') {
+                  if (item.kind === 'activity') {
+                    const totalToolMs = item.tools.reduce(
+                      (sum, t) => sum + (t.durationMs ?? 0),
+                      0,
+                    )
+                    const doneCount = item.tools.filter((t) => t.status !== 'running').length
                     return (
-                      <div key={item.id} className="msg">
-                        <span className="role">工具</span>
-                        <div className="tool-chip">{item.text}</div>
+                      <div key={item.id} className="msg activity">
+                        <span className="role">活动</span>
+                        <div className="activity-card">
+                          <div className="activity-summary">
+                            {item.tools.length} 个工具
+                            {doneCount > 0 ? ` · ${doneCount}/${item.tools.length} 完成` : ''}
+                            {totalToolMs > 0 ? ` · ${formatDuration(totalToolMs)}` : ''}
+                          </div>
+                          <ul className="activity-list">
+                            {item.tools.map((tool) => (
+                              <li
+                                key={tool.toolCallId}
+                                className={`activity-row status-${tool.status}`}
+                              >
+                                <span className="activity-dot" aria-hidden />
+                                <div className="activity-body">
+                                  <div className="activity-name">{tool.name}</div>
+                                  {formatToolSummary(tool.argsJson) ? (
+                                    <div className="activity-args">
+                                      {formatToolSummary(tool.argsJson)}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <div className="activity-meta">
+                                  <span className="activity-status">
+                                    {tool.status === 'running'
+                                      ? '执行中'
+                                      : tool.status === 'ok'
+                                        ? '完成'
+                                        : tool.status === 'interrupted'
+                                          ? '中断'
+                                          : '失败'}
+                                  </span>
+                                  {tool.durationMs != null ? (
+                                    <span className="activity-ms">
+                                      {formatDuration(tool.durationMs)}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
                     )
                   }
@@ -415,13 +591,42 @@ export default function App() {
                     return (
                       <div key={item.id} className="msg assistant">
                         <span className="role">助手</span>
-                        <div className="bubble">{item.text}</div>
+                        <div className="bubble">
+                          <Markdown text={item.text} />
+                        </div>
+                        <div className="msg-actions">
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            title={copiedId === item.id ? '已复制' : '复制'}
+                            aria-label={copiedId === item.id ? '已复制' : '复制'}
+                            onClick={() => void onCopy(item.id, item.text)}
+                          >
+                            {copiedId === item.id ? <CheckIcon /> : <CopyIcon />}
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            title="重新生成"
+                            aria-label="重新生成"
+                            disabled={busy || !item.complete}
+                            onClick={() => void onRegenerate(item.id)}
+                          >
+                            <RefreshIcon />
+                          </button>
+                          {item.elapsedMs != null ? (
+                            <span className="elapsed" title={`总耗时 ${formatDuration(item.elapsedMs)}`}>
+                              <ClockIcon />
+                              {formatDuration(item.elapsedMs)}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     )
                   }
                   if (item.kind === 'error') {
                     return (
-                      <div key={item.id} className="msg">
+                      <div key={item.id} className="msg assistant">
                         <span className="role">错误</span>
                         <div className="bubble" style={{ color: 'var(--danger)' }}>
                           {item.text}
@@ -484,7 +689,6 @@ export default function App() {
                   }
                   return null
                 })}
-                <div ref={bottomRef} />
               </div>
             </div>
             <div className="dock">

@@ -61,7 +61,10 @@ export async function streamSse(
         continue
       }
       if (line.startsWith('data:')) {
-        dataLines.push(line.slice(5).trimStart())
+        // SSE：只去掉 data: 后可选的一个前导空格，不能 trimStart（会吃掉正文空格）
+        let payload = line.slice(5)
+        if (payload.startsWith(' ')) payload = payload.slice(1)
+        dataLines.push(payload)
       }
     }
   }
