@@ -74,15 +74,14 @@ export function TraceTree({ traceId, trace, loading, error, open, onToggle }: Pr
       </button>
       {open ? (
         <div className="trace-body">
-          {error ? <div className="trace-empty">暂无链路数据</div> : null}
-          {!error && loading ? <div className="trace-empty">加载中…</div> : null}
-          {!error && !loading && !trace ? (
+          {loading ? <div className="trace-empty">加载中…</div> : null}
+          {!loading && error ? (
+            <div className="trace-empty trace-error">链路加载失败：{error}</div>
+          ) : null}
+          {!loading && !error && (!trace || !trace.tree?.length) ? (
             <div className="trace-empty">暂无链路数据</div>
           ) : null}
-          {!error && !loading && trace && (!trace.tree || trace.tree.length === 0) ? (
-            <div className="trace-empty">暂无链路数据</div>
-          ) : null}
-          {!error && !loading && trace && trace.tree?.length ? (
+          {!loading && !error && trace && trace.tree?.length ? (
             <ul className="trace-tree">
               {trace.tree.map((node) => (
                 <Node key={node.span.id} node={node} depth={0} />

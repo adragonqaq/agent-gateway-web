@@ -167,6 +167,136 @@ textarea {
   gap: 8px;
 }
 
+.observe-panel {
+  flex: 0 0 auto;
+  max-height: 42%;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.observe-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.observe-refresh {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.observe-refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.observe-error {
+  font-size: 0.72rem;
+  color: var(--danger);
+}
+
+.observe-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.observe-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.observe-empty {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.quota-line {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.usage-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.usage-grid li {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.usage-name {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.usage-val {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.audit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow: auto;
+}
+
+.audit-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.audit-list li:last-child {
+  border-bottom: none;
+}
+
+.audit-type {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.audit-time {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
 .field label {
   display: block;
   font-size: 0.75rem;
@@ -692,6 +822,10 @@ textarea {
   padding: 10px 4px;
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+.trace-empty.trace-error {
+  color: var(--danger);
 }
 
 .trace-tree,

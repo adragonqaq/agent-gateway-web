@@ -17,6 +17,8 @@ export type TimelineItem =
       kind: 'answer'
       text: string
       elapsedMs?: number
+      /** 本轮任务 ID；用于回填 token */
+      taskId?: string
       /** 本轮累计 token；模型未回传时为空 */
       promptTokens?: number
       completionTokens?: number
@@ -99,4 +101,21 @@ export type TraceView = {
   traceId: string
   spans: TraceSpan[]
   tree: TraceTreeNode[]
+}
+
+export type AuditEvent = {
+  id: string
+  event_type?: string
+  eventType?: string
+  ref_id?: string
+  refId?: string
+  detail_json?: string
+  detailJson?: string
+  created_at?: string
+  createdAt?: string
+}
+
+export type UsageMetric = {
+  metric: string
+  total: number
 }

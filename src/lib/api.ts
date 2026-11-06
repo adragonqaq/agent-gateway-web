@@ -1,5 +1,5 @@
 import { parseMaybeJson, streamSse, type SseHandler } from './sse'
-import type { ConfirmCall, Settings, TraceView } from './types'
+import type { AuditEvent, ConfirmCall, Settings, TraceView, UsageMetric } from './types'
 
 function resolveUrl(settings: Settings, path: string): string {
   const base = settings.baseUrl.trim().replace(/\/$/, '')
@@ -130,4 +130,85 @@ export function asText(data: string): string {
   if (typeof parsed === 'string') return parsed
   if (parsed == null) return data
   return typeof parsed === 'object' ? JSON.stringify(parsed) : String(parsed)
+}
+
+/** 本租户最近审计事件 */
+export async function fetchAudit(
+  settings: Settings,
+  limit = 30,
+): Promise<AuditEvent[]> {
+  const res = await fetch(
+    resolveUrl(settings, `/v1/observe/audit?limit=${encodeURIComponent(String(limit))}`),
+    { headers: authHeaders(settings) },
+  )
+  if (!res.ok) {
+    throw new Error(`审计查询失败 HTTP ${res.status}`)
+  }
+  return (await res.json()) as AuditEvent[]
+}
+
+export type QuotaSnapshot = {
+  tokenQuota: number | null
+  tokenUsed: number
+  tokenRemaining: number | null
+  unlimited: boolean
+}
+
+/** 本租户 token 配额快照 */
+export async function fetchQuota(settings: Settings): Promise<QuotaSnapshot> {
+  const res = await fetch(resolveUrl(settings, '/v1/observe/quota'), {
+    headers: authHeaders(settings),
+  })
+  if (!res.ok) {
+    throw new Error(`配额查询失败 HTTP ${res.status}`)
+  }
+  const row = (await res.json()) as Record<string, unknown>
+  return {
+    tokenQuota: row.tokenQuota == null ? null : Number(row.tokenQuota),
+    tokenUsed: Number(row.tokenUsed ?? 0),
+    tokenRemaining: row.tokenRemaining == null ? null : Number(row.tokenRemaining),
+    unlimited: Boolean(row.unlimited),
+  }
+}
+
+/** 本租户用量汇总 */
+export async function fetchUsage(settings: Settings): Promise<UsageMetric[]> {
+  const res = await fetch(resolveUrl(settings, '/v1/observe/usage'), {
+    headers: authHeaders(settings),
+  })
+  if (!res.ok) {
+    throw new Error(`用量查询失败 HTTP ${res.status}`)
+  }
+  const rows = (await res.json()) as Array<Record<string, unknown>>
+  return rows.map((r) => ({
+    metric: String(r.metric ?? ''),
+    total: Number(r.total ?? 0),
+  }))
+}
+
+/** 按任务回填本轮 token */
+export async function fetchTaskUsage(
+  settings: Settings,
+  taskId: string,
+): Promise<{ promptTokens?: number; completionTokens?: number; totalTokens?: number }> {
+  const res = await fetch(
+    resolveUrl(settings, `/v1/observe/usage/tasks/${encodeURIComponent(taskId)}`),
+    { headers: authHeaders(settings) },
+  )
+  if (!res.ok) {
+    throw new Error(`任务用量查询失败 HTTP ${res.status}`)
+  }
+  const row = (await res.json()) as Record<string, unknown>
+  const prompt = Number(row.prompt_tokens ?? row.promptTokens)
+  const completion = Number(row.completion_tokens ?? row.completionTokens)
+  const total = Number(row.total_tokens ?? row.totalTokens)
+  return {
+    promptTokens: Number.isFinite(prompt) ? prompt : undefined,
+    completionTokens: Number.isFinite(completion) ? completion : undefined,
+    totalTokens: Number.isFinite(total)
+      ? total
+      : Number.isFinite(prompt) && Number.isFinite(completion)
+        ? prompt + completion
+        : undefined,
+  }
 }

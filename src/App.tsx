@@ -4,9 +4,14 @@ import {
   cancelRun,
   chatStream,
   confirmStream,
+  fetchAudit,
+  fetchQuota,
+  fetchTaskUsage,
   fetchTrace,
+  fetchUsage,
   readConfirmPayload,
   readMeta,
+  type QuotaSnapshot,
 } from './lib/api'
 import { copyText, formatDuration, formatTokens, formatToolSummary } from './lib/format'
 import {
@@ -18,8 +23,16 @@ import {
 import { mapToolStatus, parseDonePayload, parseToolPayload } from './lib/toolEvent'
 import { BranchIcon, CheckIcon, ClockIcon, CopyIcon, RefreshIcon } from './components/Icons'
 import { Markdown } from './components/Markdown'
+import { ObservePanel } from './components/ObservePanel'
 import { TraceTree } from './components/TraceTree'
-import type { Conversation, Settings, TimelineItem, ToolRun } from './lib/types'
+import type {
+  AuditEvent,
+  Conversation,
+  Settings,
+  TimelineItem,
+  ToolRun,
+  UsageMetric,
+} from './lib/types'
 import './styles.css'
 
 const CHIPS = [
@@ -57,17 +70,51 @@ export default function App() {
   const [taskId, setTaskId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [usage, setUsage] = useState<UsageMetric[]>([])
+  const [audit, setAudit] = useState<AuditEvent[]>([])
+  const [quota, setQuota] = useState<QuotaSnapshot | null>(null)
+  const [observeLoading, setObserveLoading] = useState(false)
+  const [observeError, setObserveError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const threadRef = useRef<HTMLDivElement | null>(null)
   const runStartedAtRef = useRef<number | null>(null)
   const streamConvIdRef = useRef<string | null>(null)
   const lastTraceIdRef = useRef<string | null>(null)
+  const lastTaskIdRef = useRef<string | null>(null)
+  const prevBusyRef = useRef(false)
+  const tokenBackfillRef = useRef<Set<string>>(new Set())
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
     [conversations, activeId],
   )
   const isEmpty = !active || active.items.length === 0
+
+  async function refreshObserve() {
+    if (!settings.apiKey.trim()) {
+      setUsage([])
+      setAudit([])
+      setQuota(null)
+      setObserveError(null)
+      return
+    }
+    setObserveLoading(true)
+    setObserveError(null)
+    try {
+      const [u, a, q] = await Promise.all([
+        fetchUsage(settings),
+        fetchAudit(settings, 20),
+        fetchQuota(settings),
+      ])
+      setUsage(u)
+      setAudit(a)
+      setQuota(q)
+    } catch (e) {
+      setObserveError((e as Error).message || '观测加载失败')
+    } finally {
+      setObserveLoading(false)
+    }
+  }
 
   useEffect(() => {
     saveConversations(conversations)
@@ -76,6 +123,39 @@ export default function App() {
   useEffect(() => {
     saveSettings(settings)
   }, [settings])
+
+  useEffect(() => {
+    void refreshObserve()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 API Key / Base 变化时重拉
+  }, [settings.apiKey, settings.baseUrl])
+
+  useEffect(() => {
+    // 一轮跑完后刷新用量/审计
+    if (prevBusyRef.current && !busy) {
+      void refreshObserve()
+    }
+    prevBusyRef.current = busy
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy])
+
+  useEffect(() => {
+    // 旧消息：有 taskId 无 token 时回填
+    if (!settings.apiKey.trim()) return
+    for (const c of conversations) {
+      for (const it of c.items) {
+        if (
+          it.kind === 'answer' &&
+          it.complete &&
+          it.taskId &&
+          it.totalTokens == null &&
+          !tokenBackfillRef.current.has(it.id)
+        ) {
+          void backfillTokens(it.id, it.taskId)
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations, settings.apiKey, settings.baseUrl])
 
   useEffect(() => {
     // 只滚消息容器，避免 scrollIntoView 把整页往下拽
@@ -183,6 +263,7 @@ export default function App() {
       runStartedAtRef.current != null ? Date.now() - runStartedAtRef.current : undefined
     const elapsedMs = done.elapsedMs ?? localElapsed
     const traceId = lastTraceIdRef.current ?? undefined
+    const runTaskId = lastTaskIdRef.current ?? undefined
     let answerId: string | null = null
     patchItems(conversationId, (items) => {
       const next = [...items]
@@ -194,12 +275,15 @@ export default function App() {
             ...it,
             complete: true,
             elapsedMs,
+            taskId: runTaskId,
             promptTokens: done.promptTokens,
             completionTokens: done.completionTokens,
             totalTokens: done.totalTokens,
             traceId,
+            // 链路默认折叠；预取但不自动展开
             traceLoading: Boolean(traceId),
             traceOpen: false,
+            traceError: undefined,
           }
           break
         }
@@ -209,6 +293,9 @@ export default function App() {
     runStartedAtRef.current = null
     if (traceId && answerId) {
       void loadTraceForAnswer(answerId, traceId)
+    }
+    if (answerId && runTaskId && done.totalTokens == null) {
+      void backfillTokens(answerId, runTaskId)
     }
   }
 
@@ -237,14 +324,34 @@ export default function App() {
         traceLoading: false,
         traceError: undefined,
       }))
-    } catch {
-      // 静默失败：展开时显示「暂无链路数据」
+    } catch (e) {
       patchAnswerById(answerId, (it) => ({
         ...it,
         trace: null,
         traceLoading: false,
-        traceError: undefined,
+        traceError: (e as Error).message || '链路加载失败',
       }))
+    }
+  }
+
+  async function backfillTokens(answerId: string, taskId: string) {
+    if (!settings.apiKey.trim() || tokenBackfillRef.current.has(answerId)) return
+    tokenBackfillRef.current.add(answerId)
+    try {
+      const u = await fetchTaskUsage(settings, taskId)
+      if (u.totalTokens == null && u.promptTokens == null) return
+      patchAnswerById(answerId, (it) =>
+        it.totalTokens != null
+          ? it
+          : {
+              ...it,
+              promptTokens: u.promptTokens,
+              completionTokens: u.completionTokens,
+              totalTokens: u.totalTokens,
+            },
+      )
+    } catch {
+      tokenBackfillRef.current.delete(answerId)
     }
   }
 
@@ -256,7 +363,7 @@ export default function App() {
         // 展开且尚无树时强制重拉（含上次卡住的 loading）
         if (open && !it.trace && it.traceId) {
           void loadTraceForAnswer(answerId, it.traceId)
-          return { ...it, traceOpen: true, traceLoading: true }
+          return { ...it, traceOpen: true, traceLoading: true, traceError: undefined }
         }
         return { ...it, traceOpen: open }
       }),
@@ -271,7 +378,10 @@ export default function App() {
     const cid = streamConvIdRef.current || conversationId
     if (event === 'meta') {
       const meta = readMeta(data)
-      if (meta.taskId) setTaskId(meta.taskId)
+      if (meta.taskId) {
+        setTaskId(meta.taskId)
+        lastTaskIdRef.current = meta.taskId
+      }
       if (meta.traceId) lastTraceIdRef.current = meta.traceId
       runStartedAtRef.current = Date.now()
       if (meta.conversationId && meta.conversationId !== cid) {
@@ -327,6 +437,7 @@ export default function App() {
     setError(null)
     streamConvIdRef.current = conversationId
     lastTraceIdRef.current = null
+    lastTaskIdRef.current = null
     runStartedAtRef.current = Date.now()
     const controller = new AbortController()
     abortRef.current = controller
@@ -496,6 +607,14 @@ export default function App() {
             </button>
           ))}
         </div>
+        <ObservePanel
+          usage={usage}
+          audit={audit}
+          quota={quota}
+          loading={observeLoading}
+          error={observeError}
+          onRefresh={() => void refreshObserve()}
+        />
         <div className="sidebar-foot">
           <div className="field">
             <label htmlFor="apiKey">RUNTIME API Key</label>
