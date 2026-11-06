@@ -23,7 +23,12 @@ import {
   saveConversations,
   saveSettings,
 } from './lib/storage'
-import { mapToolStatus, parseDonePayload, parseToolPayload } from './lib/toolEvent'
+import {
+  mapToolStatus,
+  parseDonePayload,
+  parseToolPayload,
+  sanitizeAssistantText,
+} from './lib/toolEvent'
 import { AppRailBrand } from './components/AppRailBrand'
 import { AppTopUser } from './components/AppTopUser'
 import { ConsolePage } from './components/ConsolePage'
@@ -95,6 +100,8 @@ export default function App() {
   const lastTaskIdRef = useRef<string | null>(null)
   const prevBusyRef = useRef(false)
   const tokenBackfillRef = useRef<Set<string>>(new Set())
+  const answerRawRef = useRef('')
+  const seenMarkupToolsRef = useRef<Set<string>>(new Set())
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
@@ -251,15 +258,72 @@ export default function App() {
     kind: 'thinking' | 'answer',
     chunk: string,
   ) {
+    if (kind === 'answer') {
+      appendAnswerSanitized(conversationId, chunk)
+      return
+    }
     patchItems(conversationId, (items) => {
       const last = items[items.length - 1]
       if (last && last.kind === kind) {
         return [...items.slice(0, -1), { ...last, text: last.text + chunk }]
       }
-      if (kind === 'answer') {
-        return [...items, { id: uid('answer'), kind: 'answer', text: chunk }]
-      }
       return [...items, { id: uid(kind), kind, text: chunk }]
+    })
+  }
+
+  /**
+   * 累积原始 answer，去掉 &lt;tool_call&gt; 泄漏，并把解析出的调用升成活动卡。
+   */
+  function appendAnswerSanitized(conversationId: string, chunk: string) {
+    answerRawRef.current += chunk
+    const { display, tools } = sanitizeAssistantText(answerRawRef.current)
+    for (const tool of tools) {
+      if (seenMarkupToolsRef.current.has(tool.toolCallId)) continue
+      seenMarkupToolsRef.current.add(tool.toolCallId)
+      applyToolEvent(
+        conversationId,
+        JSON.stringify({
+          phase: 'start',
+          toolCallId: tool.toolCallId,
+          name: tool.name,
+          argsJson: tool.argsJson,
+        }),
+      )
+      applyToolEvent(
+        conversationId,
+        JSON.stringify({
+          phase: 'args',
+          toolCallId: tool.toolCallId,
+          name: tool.name,
+          argsJson: tool.argsJson,
+        }),
+      )
+      applyToolEvent(
+        conversationId,
+        JSON.stringify({
+          phase: 'end',
+          toolCallId: tool.toolCallId,
+          name: tool.name,
+          argsJson: tool.argsJson,
+          status: 'ok',
+        }),
+      )
+    }
+    patchItems(conversationId, (items) => {
+      // 找到本轮最后一个未 complete 的 answer；没有则新建
+      for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i]
+        if (it.kind === 'answer' && !it.complete) {
+          if (!display.trim()) {
+            return [...items.slice(0, i), ...items.slice(i + 1)]
+          }
+          const next = [...items]
+          next[i] = { ...it, text: display }
+          return next
+        }
+      }
+      if (!display.trim()) return items
+      return [...items, { id: uid('answer'), kind: 'answer', text: display }]
     })
   }
 
@@ -481,6 +545,8 @@ export default function App() {
   async function runChat(conversationId: string, message: string) {
     setBusy(true)
     setError(null)
+    answerRawRef.current = ''
+    seenMarkupToolsRef.current = new Set()
     streamConvIdRef.current = conversationId
     lastTraceIdRef.current = null
     lastTaskIdRef.current = null
@@ -580,6 +646,8 @@ export default function App() {
     if (!canCallApi(settings) || busy) return
     setBusy(true)
     setError(null)
+    answerRawRef.current = ''
+    seenMarkupToolsRef.current = new Set()
     streamConvIdRef.current = conversationId
     runStartedAtRef.current = Date.now()
     patchItems(conversationId, (items) =>

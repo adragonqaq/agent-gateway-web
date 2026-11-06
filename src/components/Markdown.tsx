@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import { sanitizeAssistantText } from '../lib/toolEvent'
 
 type Props = {
   text: string
@@ -7,6 +8,8 @@ type Props = {
 
 /** 助手气泡 Markdown 渲染（列表 / 加粗 / 代码等） */
 export function Markdown({ text, className }: Props) {
+  const { display } = sanitizeAssistantText(text)
+  if (!display.trim()) return null
   return (
     <div className={className ? `md ${className}` : 'md'}>
       <ReactMarkdown
@@ -18,7 +21,7 @@ export function Markdown({ text, className }: Props) {
           ),
         }}
       >
-        {text}
+        {display}
       </ReactMarkdown>
     </div>
   )

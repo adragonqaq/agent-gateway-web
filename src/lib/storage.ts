@@ -1,3 +1,4 @@
+import { sanitizeAssistantText } from './toolEvent'
 import type { Conversation, Settings } from './types'
 
 const SETTINGS_KEY = 'ag.web.settings'
@@ -37,6 +38,7 @@ export function loadConversations(): Conversation[] {
         if (it.kind !== 'answer') return it
         return {
           ...it,
+          text: sanitizeAssistantText(it.text).display,
           trace: undefined,
           traceLoading: false,
           traceOpen: false,

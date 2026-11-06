@@ -74,3 +74,65 @@ export function mapToolStatus(status: string | undefined): ToolRunStatus {
   if (status === 'ok' || status === 'SUCCESS') return 'ok'
   return 'running'
 }
+
+export type ExtractedToolCall = {
+  toolCallId: string
+  name: string
+  argsJson: string
+}
+
+const TOOL_CALL_BLOCK =
+  /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/gi
+
+/**
+ * 去掉模型误写入的 &lt;tool_call&gt; 文本，并解析为工具卡片数据。
+ * 流式过程中会隐藏未闭合标签，避免气泡出现半截 XML。
+ */
+export function sanitizeAssistantText(raw: string): {
+  display: string
+  tools: ExtractedToolCall[]
+} {
+  if (!raw) return { display: '', tools: [] }
+  const tools: ExtractedToolCall[] = []
+  let display = raw.replace(TOOL_CALL_BLOCK, (_m, body: string) => {
+    const parsed = parseToolCallBody(String(body ?? ''))
+    if (parsed) tools.push(parsed)
+    return ''
+  })
+  // 未闭合的 tool_call：整段隐藏
+  const openIdx = display.toLowerCase().lastIndexOf('<tool_call>')
+  const closeIdx = display.toLowerCase().lastIndexOf('</tool_call>')
+  if (openIdx >= 0 && openIdx > closeIdx) {
+    display = display.slice(0, openIdx)
+  }
+  // 流式半截开标签：<t / <to / <tool_call …
+  display = display.replace(/<\/?t(?:o(?:o(?:l(?:_(?:c(?:a(?:l(?:l)?)?)?)?)?)?)?)?$/i, '')
+  display = display.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+\n/g, '\n').trimEnd()
+  return { display, tools }
+}
+
+function parseToolCallBody(body: string): ExtractedToolCall | null {
+  const trimmed = body.trim()
+  if (!trimmed) return null
+  try {
+    const obj = JSON.parse(trimmed) as Record<string, unknown>
+    const name = String(obj.name ?? obj.tool ?? '').trim()
+    if (!name) return null
+    const args =
+      obj.arguments ?? obj.args ?? obj.parameters ?? {}
+    const argsJson =
+      typeof args === 'string' ? args : JSON.stringify(args)
+    const idSeed = `${name}:${argsJson}`
+    let hash = 0
+    for (let i = 0; i < idSeed.length; i++) {
+      hash = (hash * 31 + idSeed.charCodeAt(i)) | 0
+    }
+    return {
+      toolCallId: `markup_${Math.abs(hash).toString(36)}`,
+      name,
+      argsJson,
+    }
+  } catch {
+    return null
+  }
+}
