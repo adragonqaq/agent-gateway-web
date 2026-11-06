@@ -11,6 +11,7 @@ export async function streamSse(
 ): Promise<void> {
   const res = await fetch(url, {
     ...init,
+    credentials: init.credentials ?? 'include',
     signal,
     headers: {
       Accept: 'text/event-stream',

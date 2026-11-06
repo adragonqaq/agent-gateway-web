@@ -892,3 +892,240 @@ textarea {
     transition: none !important;
   }
 }
+
+/* —— Auth / Console shell —— */
+.app.shell {
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 280px 1fr;
+}
+
+.app.shell > .topbar {
+  grid-column: 1 / -1;
+}
+
+.app.shell > .console-main {
+  grid-column: 1 / -1;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.65rem 1.1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+}
+
+.topbar-brand img {
+  width: 22px;
+  height: 22px;
+}
+
+.mode-nav {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.mode-nav button,
+.scope-toggle button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.mode-nav button.active,
+.scope-toggle button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.topbar-right select {
+  max-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.35rem 0.55rem;
+  background: var(--bg);
+}
+
+.topbar-email {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.btn-text {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+}
+
+.auth-page {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(ellipse at 20% 10%, #d9f3ef 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 80%, #e8efe9 0%, transparent 45%),
+    var(--bg);
+}
+
+.auth-card {
+  width: min(400px, 92vw);
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.auth-sub {
+  margin: 0;
+  color: var(--muted);
+}
+
+.auth-primary {
+  border: none;
+  background: var(--accent);
+  color: white;
+  border-radius: 12px;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.auth-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.auth-switch {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.scope-toggle {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0 0.75rem 0.5rem;
+}
+
+.scope-hint {
+  padding: 0 0.75rem 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.console-page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  overflow: auto;
+  height: 100%;
+}
+
+.console-head h2 {
+  margin: 0 0 0.25rem;
+  font-family: var(--font-display);
+}
+
+.console-head p {
+  margin: 0 0 1rem;
+  color: var(--muted);
+}
+
+.console-section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.console-section h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.console-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.console-row input {
+  flex: 1;
+  min-width: 140px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.45rem 0.65rem;
+}
+
+.console-row button,
+.console-section > button {
+  border: none;
+  background: var(--accent);
+  color: white;
+  border-radius: 10px;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+}
+
+.mcp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mcp-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.mcp-list .meta {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.issued-key {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--accent-soft);
+  border-radius: 10px;
+}
+
+.issued-key code {
+  display: block;
+  word-break: break-all;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}

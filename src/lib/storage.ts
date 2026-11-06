@@ -6,6 +6,8 @@ const CONV_KEY = 'ag.web.conversations'
 const defaultSettings: Settings = {
   apiKey: '',
   baseUrl: '',
+  projectId: '',
+  observeScope: 'project',
 }
 
 export function loadSettings(): Settings {

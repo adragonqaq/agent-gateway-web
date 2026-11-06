@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   asText,
+  canCallApi,
   cancelRun,
   chatStream,
   confirmStream,
   fetchAudit,
+  fetchMe,
   fetchQuota,
   fetchTaskUsage,
   fetchTrace,
   fetchUsage,
+  logoutUser,
   readConfirmPayload,
   readMeta,
   type QuotaSnapshot,
@@ -21,13 +24,16 @@ import {
   saveSettings,
 } from './lib/storage'
 import { mapToolStatus, parseDonePayload, parseToolPayload } from './lib/toolEvent'
+import { ConsolePage } from './components/ConsolePage'
 import { BranchIcon, CheckIcon, ClockIcon, CopyIcon, RefreshIcon } from './components/Icons'
+import { LoginPage } from './components/LoginPage'
 import { Markdown } from './components/Markdown'
 import { ObservePanel } from './components/ObservePanel'
 import { TraceTree } from './components/TraceTree'
 import type {
   AuditEvent,
   Conversation,
+  Me,
   Settings,
   TimelineItem,
   ToolRun,
@@ -59,6 +65,9 @@ function upsertTool(tools: ToolRun[], next: ToolRun): ToolRun[] {
 
 export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings())
+  const [me, setMe] = useState<Me | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [mode, setMode] = useState<'chat' | 'console'>('chat')
   const [conversations, setConversations] = useState<Conversation[]>(() =>
     loadConversations(),
   )
@@ -75,6 +84,7 @@ export default function App() {
   const [quota, setQuota] = useState<QuotaSnapshot | null>(null)
   const [observeLoading, setObserveLoading] = useState(false)
   const [observeError, setObserveError] = useState<string | null>(null)
+  const [debugOpen, setDebugOpen] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const threadRef = useRef<HTMLDivElement | null>(null)
   const runStartedAtRef = useRef<number | null>(null)
@@ -89,9 +99,21 @@ export default function App() {
     [conversations, activeId],
   )
   const isEmpty = !active || active.items.length === 0
+  const currentProject = me?.projects.find((p) => p.id === settings.projectId)
+  const isOwner = (currentProject?.role ?? '').toLowerCase() === 'owner'
+  const observeScope: 'me' | 'project' = isOwner ? settings.observeScope : 'me'
+
+  function applyMe(next: Me) {
+    setMe(next)
+    setSettings((s) => {
+      const stillValid = next.projects.some((p) => p.id === s.projectId)
+      const projectId = stillValid ? s.projectId : (next.projects[0]?.id ?? '')
+      return { ...s, projectId }
+    })
+  }
 
   async function refreshObserve() {
-    if (!settings.apiKey.trim()) {
+    if (!canCallApi(settings)) {
       setUsage([])
       setAudit([])
       setQuota(null)
@@ -101,9 +123,10 @@ export default function App() {
     setObserveLoading(true)
     setObserveError(null)
     try {
+      const scope = isOwner ? settings.observeScope : 'me'
       const [u, a, q] = await Promise.all([
-        fetchUsage(settings),
-        fetchAudit(settings, 20),
+        fetchUsage(settings, scope),
+        fetchAudit(settings, 20, scope),
         fetchQuota(settings),
       ])
       setUsage(u)
@@ -117,6 +140,25 @@ export default function App() {
   }
 
   useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const user = await fetchMe(settings)
+        if (cancelled) return
+        if (user) applyMe(user)
+      } catch {
+        /* 未登录 */
+      } finally {
+        if (!cancelled) setAuthLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
     saveConversations(conversations)
   }, [conversations])
 
@@ -125,9 +167,10 @@ export default function App() {
   }, [settings])
 
   useEffect(() => {
+    if (!me) return
     void refreshObserve()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 API Key / Base 变化时重拉
-  }, [settings.apiKey, settings.baseUrl])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me, settings.projectId, settings.apiKey, settings.baseUrl, settings.observeScope])
 
   useEffect(() => {
     // 一轮跑完后刷新用量/审计
@@ -140,7 +183,7 @@ export default function App() {
 
   useEffect(() => {
     // 旧消息：有 taskId 无 token 时回填
-    if (!settings.apiKey.trim()) return
+    if (!canCallApi(settings)) return
     for (const c of conversations) {
       for (const it of c.items) {
         if (
@@ -155,7 +198,7 @@ export default function App() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversations, settings.apiKey, settings.baseUrl])
+  }, [conversations, settings.projectId, settings.apiKey, settings.baseUrl])
 
   useEffect(() => {
     // 只滚消息容器，避免 scrollIntoView 把整页往下拽
@@ -335,7 +378,7 @@ export default function App() {
   }
 
   async function backfillTokens(answerId: string, taskId: string) {
-    if (!settings.apiKey.trim() || tokenBackfillRef.current.has(answerId)) return
+    if (!canCallApi(settings) || tokenBackfillRef.current.has(answerId)) return
     tokenBackfillRef.current.add(answerId)
     try {
       const u = await fetchTaskUsage(settings, taskId)
@@ -465,8 +508,8 @@ export default function App() {
   async function sendMessage(text: string) {
     const message = text.trim()
     if (!message || busy) return
-    if (!settings.apiKey.trim()) {
-      setError('请先在左侧填入 RUNTIME API Key')
+    if (!canCallApi(settings)) {
+      setError('请先登录并选择项目')
       return
     }
 
@@ -493,7 +536,7 @@ export default function App() {
   }
 
   async function onRegenerate(answerId: string) {
-    if (!active || busy || !settings.apiKey.trim()) return
+    if (!active || busy || !canCallApi(settings)) return
     const items = active.items
     const answerIdx = items.findIndex((it) => it.id === answerId && it.kind === 'answer')
     if (answerIdx < 0) return
@@ -531,7 +574,7 @@ export default function App() {
     approved: boolean,
     conversationId: string,
   ) {
-    if (!settings.apiKey.trim() || busy) return
+    if (!canCallApi(settings) || busy) return
     setBusy(true)
     setError(null)
     streamConvIdRef.current = conversationId
@@ -579,13 +622,82 @@ export default function App() {
     setBusy(false)
   }
 
+  if (authLoading) {
+    return <div className="auth-page"><div className="auth-card">加载中…</div></div>
+  }
+
+  if (!me) {
+    return (
+      <LoginPage
+        settings={settings}
+        onAuthed={(user) => {
+          applyMe(user)
+          setMode('chat')
+        }}
+      />
+    )
+  }
+
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="brand-row">
+    <div className="app shell">
+      <header className="topbar">
+        <div className="topbar-brand">
           <img src="/mark.svg" alt="" />
           <strong>Agent Gateway</strong>
         </div>
+        <nav className="mode-nav">
+          <button
+            type="button"
+            className={mode === 'chat' ? 'active' : ''}
+            onClick={() => setMode('chat')}
+          >
+            对话
+          </button>
+          <button
+            type="button"
+            className={mode === 'console' ? 'active' : ''}
+            onClick={() => setMode('console')}
+          >
+            控制台
+          </button>
+        </nav>
+        <div className="topbar-right">
+          <select
+            aria-label="当前项目"
+            value={settings.projectId}
+            onChange={(e) =>
+              setSettings((s) => ({ ...s, projectId: e.target.value }))
+            }
+          >
+            {me.projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({p.role})
+              </option>
+            ))}
+          </select>
+          <span className="topbar-email">{me.email}</span>
+          <button
+            type="button"
+            className="btn-text"
+            onClick={() => {
+              void logoutUser(settings).finally(() => {
+                setMe(null)
+                setMode('chat')
+              })
+            }}
+          >
+            退出
+          </button>
+        </div>
+      </header>
+
+      {mode === 'console' ? (
+        <main className="main console-main">
+          <ConsolePage me={me} settings={settings} isOwner={isOwner} />
+        </main>
+      ) : (
+        <>
+      <aside className="sidebar">
         <button type="button" className="btn btn-new" onClick={newChat}>
           + 新建对话
         </button>
@@ -613,33 +725,49 @@ export default function App() {
           quota={quota}
           loading={observeLoading}
           error={observeError}
+          scope={observeScope}
+          canSwitchScope={isOwner}
+          onScopeChange={(scope) =>
+            setSettings((s) => ({ ...s, observeScope: scope }))
+          }
           onRefresh={() => void refreshObserve()}
         />
         <div className="sidebar-foot">
-          <div className="field">
-            <label htmlFor="apiKey">RUNTIME API Key</label>
-            <input
-              id="apiKey"
-              type="password"
-              autoComplete="off"
-              placeholder="sk_..."
-              value={settings.apiKey}
-              onChange={(e) =>
-                setSettings((s) => ({ ...s, apiKey: e.target.value }))
-              }
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="baseUrl">API Base（可空=走 Vite 代理）</label>
-            <input
-              id="baseUrl"
-              placeholder="http://127.0.0.1:8080"
-              value={settings.baseUrl}
-              onChange={(e) =>
-                setSettings((s) => ({ ...s, baseUrl: e.target.value }))
-              }
-            />
-          </div>
+          <button
+            type="button"
+            className="btn-text"
+            onClick={() => setDebugOpen((v) => !v)}
+          >
+            {debugOpen ? '收起调试' : '调试选项'}
+          </button>
+          {debugOpen ? (
+            <>
+              <div className="field">
+                <label htmlFor="apiKey">RUNTIME API Key（可选）</label>
+                <input
+                  id="apiKey"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="sk_..."
+                  value={settings.apiKey}
+                  onChange={(e) =>
+                    setSettings((s) => ({ ...s, apiKey: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="baseUrl">API Base（可空=走 Vite 代理）</label>
+                <input
+                  id="baseUrl"
+                  placeholder="http://127.0.0.1:8080"
+                  value={settings.baseUrl}
+                  onChange={(e) =>
+                    setSettings((s) => ({ ...s, baseUrl: e.target.value }))
+                  }
+                />
+              </div>
+            </>
+          ) : null}
         </div>
       </aside>
 
@@ -952,6 +1080,8 @@ export default function App() {
           </>
         )}
       </main>
+        </>
+      )}
     </div>
   )
 }

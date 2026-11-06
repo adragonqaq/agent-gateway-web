@@ -54,9 +54,26 @@ export type Conversation = {
   items: TimelineItem[]
 }
 
+export type ProjectSummary = {
+  id: string
+  name: string
+  role: string
+}
+
+export type Me = {
+  id: string
+  email: string
+  projects: ProjectSummary[]
+}
+
 export type Settings = {
+  /** 调试用 API Key；浏览器主路径用 Cookie 会话 */
   apiKey: string
   baseUrl: string
+  /** 当前项目（X-Project-Id） */
+  projectId: string
+  /** 观测 scope：me | project */
+  observeScope: 'me' | 'project'
 }
 
 export type ToolPhasePayload = {
@@ -105,6 +122,8 @@ export type TraceView = {
 
 export type AuditEvent = {
   id: string
+  user_id?: string
+  userId?: string
   event_type?: string
   eventType?: string
   ref_id?: string
@@ -118,4 +137,20 @@ export type AuditEvent = {
 export type UsageMetric = {
   metric: string
   total: number
+}
+
+export type McpServerView = {
+  id: string
+  tenantId: string
+  name: string
+  transportUrl: string
+  status: string
+  hasHeaders: boolean
+}
+
+export type IssuedKey = {
+  id: string
+  apiKey: string
+  prefix: string
+  role: string
 }
