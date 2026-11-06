@@ -27,12 +27,34 @@ export function loadConversations(): Conversation[] {
     const raw = localStorage.getItem(CONV_KEY)
     if (!raw) return []
     const list = JSON.parse(raw) as Conversation[]
-    return Array.isArray(list) ? list : []
+    if (!Array.isArray(list)) return []
+    // 瞬时 UI 状态不恢复，避免 refresh 后一直「加载中」
+    return list.map((c) => ({
+      ...c,
+      items: (c.items ?? []).map((it) => {
+        if (it.kind !== 'answer') return it
+        return {
+          ...it,
+          trace: undefined,
+          traceLoading: false,
+          traceOpen: false,
+          traceError: undefined,
+        }
+      }),
+    }))
   } catch {
     return []
   }
 }
 
 export function saveConversations(list: Conversation[]): void {
-  localStorage.setItem(CONV_KEY, JSON.stringify(list))
+  const slim = list.map((c) => ({
+    ...c,
+    items: c.items.map((it) => {
+      if (it.kind !== 'answer') return it
+      const { trace: _t, traceLoading: _l, traceOpen: _o, traceError: _e, ...rest } = it
+      return rest
+    }),
+  }))
+  localStorage.setItem(CONV_KEY, JSON.stringify(slim))
 }

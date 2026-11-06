@@ -74,7 +74,23 @@ export function parseMaybeJson(data: string): unknown {
   const trimmed = data.trim()
   if (!trimmed) return data
   try {
-    return JSON.parse(trimmed)
+    const parsed: unknown = JSON.parse(trimmed)
+    // SseSupport 对 String 再 writeValueAsString 一次：done/tool 会变成
+    // "\"{...}\"" → 第一次 parse 得到字符串 "{...}"，需再解一层对象
+    if (typeof parsed === 'string') {
+      const inner = parsed.trim()
+      if (
+        (inner.startsWith('{') && inner.endsWith('}')) ||
+        (inner.startsWith('[') && inner.endsWith(']'))
+      ) {
+        try {
+          return JSON.parse(inner)
+        } catch {
+          return parsed
+        }
+      }
+    }
+    return parsed
   } catch {
     // Spring 可能把 JSON 字符串再包一层引号
     if (

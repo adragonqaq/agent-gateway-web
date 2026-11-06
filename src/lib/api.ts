@@ -1,5 +1,5 @@
 import { parseMaybeJson, streamSse, type SseHandler } from './sse'
-import type { ConfirmCall, Settings } from './types'
+import type { ConfirmCall, Settings, TraceView } from './types'
 
 function resolveUrl(settings: Settings, path: string): string {
   const base = settings.baseUrl.trim().replace(/\/$/, '')
@@ -89,7 +89,11 @@ export function readConfirmPayload(data: string): {
   }
 }
 
-export function readMeta(data: string): { taskId?: string; conversationId?: string } {
+export function readMeta(data: string): {
+  taskId?: string
+  conversationId?: string
+  traceId?: string
+} {
   const parsed = parseMaybeJson(data)
   if (!parsed || typeof parsed !== 'object') return {}
   const record = parsed as Record<string, unknown>
@@ -97,6 +101,27 @@ export function readMeta(data: string): { taskId?: string; conversationId?: stri
     taskId: record.taskId != null ? String(record.taskId) : undefined,
     conversationId:
       record.conversationId != null ? String(record.conversationId) : undefined,
+    traceId: record.traceId != null ? String(record.traceId) : undefined,
+  }
+}
+
+/**
+ * 拉取本轮 Trace 树（权威落库视图）。
+ */
+export async function fetchTrace(settings: Settings, traceId: string): Promise<TraceView> {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), 8000)
+  try {
+    const res = await fetch(
+      resolveUrl(settings, `/v1/observe/traces/${encodeURIComponent(traceId)}`),
+      { headers: authHeaders(settings), signal: controller.signal },
+    )
+    if (!res.ok) {
+      throw new Error(`Trace 查询失败 HTTP ${res.status}`)
+    }
+    return (await res.json()) as TraceView
+  } finally {
+    window.clearTimeout(timer)
   }
 }
 

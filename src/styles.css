@@ -647,6 +647,102 @@ textarea {
   border: 1px solid #f3c6c0;
 }
 
+.trace-panel {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.trace-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.trace-toggle:hover {
+  color: var(--ink);
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.trace-id {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-body {
+  padding: 0 8px 10px;
+  border-top: 1px solid var(--line);
+}
+
+.trace-empty {
+  padding: 10px 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.trace-tree,
+.trace-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trace-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 4px;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.trace-kind {
+  font-size: 0.7rem;
+  color: var(--accent);
+  font-weight: 600;
+  min-width: 2.5em;
+}
+
+.trace-name {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.trace-status {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.trace-status.status-error {
+  color: var(--danger);
+}
+
+.trace-status.status-waiting {
+  color: #a16207;
+}
+
+.trace-ms {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
 @media (max-width: 800px) {
   .app {
     grid-template-columns: 1fr;

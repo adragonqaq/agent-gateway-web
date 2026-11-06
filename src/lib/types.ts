@@ -12,7 +12,23 @@ export type TimelineItem =
   | { id: string; kind: 'user'; text: string }
   | { id: string; kind: 'thinking'; text: string }
   | { id: string; kind: 'activity'; tools: ToolRun[] }
-  | { id: string; kind: 'answer'; text: string; elapsedMs?: number; complete?: boolean }
+  | {
+      id: string
+      kind: 'answer'
+      text: string
+      elapsedMs?: number
+      /** 本轮累计 token；模型未回传时为空 */
+      promptTokens?: number
+      completionTokens?: number
+      totalTokens?: number
+      complete?: boolean
+      /** 本轮全链路 ID；done 后拉 Trace 树 */
+      traceId?: string
+      trace?: TraceView | null
+      traceOpen?: boolean
+      traceLoading?: boolean
+      traceError?: string
+    }
   | {
       id: string
       kind: 'confirm'
@@ -53,4 +69,34 @@ export type ToolPhasePayload = {
 export type DonePayload = {
   status?: string
   elapsedMs?: number
+  promptTokens?: number
+  completionTokens?: number
+  totalTokens?: number
+}
+
+export type TraceSpan = {
+  id: string
+  tenantId?: string
+  traceId: string
+  parentSpanId?: string | null
+  conversationId?: string | null
+  taskId?: string | null
+  name: string
+  kind: string
+  status: string
+  startedAt?: string
+  endedAt?: string | null
+  durationMs?: number | null
+  attrsJson?: string | null
+}
+
+export type TraceTreeNode = {
+  span: TraceSpan
+  children: TraceTreeNode[]
+}
+
+export type TraceView = {
+  traceId: string
+  spans: TraceSpan[]
+  tree: TraceTreeNode[]
 }

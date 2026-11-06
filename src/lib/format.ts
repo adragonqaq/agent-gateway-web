@@ -22,6 +22,14 @@ export function formatDuration(ms: number | undefined): string {
   return `${m}m${s}s`
 }
 
+/** token 数 → 短展示（如 1.2k） */
+export function formatTokens(n: number | undefined): string {
+  if (n == null || Number.isNaN(n) || n < 0) return ''
+  if (n < 1000) return `${Math.round(n)}`
+  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`
+  return `${Math.round(n / 1000)}k`
+}
+
 /** 从工具 args JSON 抽一句摘要（命令/路径优先） */
 export function formatToolSummary(argsJson: string | undefined): string {
   if (!argsJson?.trim()) return ''

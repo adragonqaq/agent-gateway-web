@@ -38,13 +38,28 @@ export function parseToolPayload(data: string): ToolPhasePayload | null {
   }
 }
 
+function asNonNegInt(v: unknown): number | undefined {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return undefined
+  return Math.round(v)
+}
+
 export function parseDonePayload(data: string): DonePayload {
   const parsed = parseMaybeJson(data)
   if (parsed && typeof parsed === 'object') {
     const o = parsed as Record<string, unknown>
+    const promptTokens = asNonNegInt(o.promptTokens)
+    const completionTokens = asNonNegInt(o.completionTokens)
+    const totalTokens =
+      asNonNegInt(o.totalTokens) ??
+      (promptTokens != null && completionTokens != null
+        ? promptTokens + completionTokens
+        : undefined)
     return {
       status: o.status != null ? String(o.status) : undefined,
       elapsedMs: typeof o.elapsedMs === 'number' ? o.elapsedMs : undefined,
+      promptTokens,
+      completionTokens,
+      totalTokens,
     }
   }
   if (typeof parsed === 'string') {

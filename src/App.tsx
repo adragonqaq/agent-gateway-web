@@ -4,10 +4,11 @@ import {
   cancelRun,
   chatStream,
   confirmStream,
+  fetchTrace,
   readConfirmPayload,
   readMeta,
 } from './lib/api'
-import { copyText, formatDuration, formatToolSummary } from './lib/format'
+import { copyText, formatDuration, formatTokens, formatToolSummary } from './lib/format'
 import {
   loadConversations,
   loadSettings,
@@ -15,8 +16,9 @@ import {
   saveSettings,
 } from './lib/storage'
 import { mapToolStatus, parseDonePayload, parseToolPayload } from './lib/toolEvent'
-import { CheckIcon, ClockIcon, CopyIcon, RefreshIcon } from './components/Icons'
+import { BranchIcon, CheckIcon, ClockIcon, CopyIcon, RefreshIcon } from './components/Icons'
 import { Markdown } from './components/Markdown'
+import { TraceTree } from './components/TraceTree'
 import type { Conversation, Settings, TimelineItem, ToolRun } from './lib/types'
 import './styles.css'
 
@@ -59,6 +61,7 @@ export default function App() {
   const threadRef = useRef<HTMLDivElement | null>(null)
   const runStartedAtRef = useRef<number | null>(null)
   const streamConvIdRef = useRef<string | null>(null)
+  const lastTraceIdRef = useRef<string | null>(null)
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
@@ -179,18 +182,85 @@ export default function App() {
     const localElapsed =
       runStartedAtRef.current != null ? Date.now() - runStartedAtRef.current : undefined
     const elapsedMs = done.elapsedMs ?? localElapsed
+    const traceId = lastTraceIdRef.current ?? undefined
+    let answerId: string | null = null
     patchItems(conversationId, (items) => {
       const next = [...items]
       for (let i = next.length - 1; i >= 0; i--) {
         const it = next[i]
         if (it.kind === 'answer') {
-          next[i] = { ...it, complete: true, elapsedMs }
+          answerId = it.id
+          next[i] = {
+            ...it,
+            complete: true,
+            elapsedMs,
+            promptTokens: done.promptTokens,
+            completionTokens: done.completionTokens,
+            totalTokens: done.totalTokens,
+            traceId,
+            traceLoading: Boolean(traceId),
+            traceOpen: false,
+          }
           break
         }
       }
       return next
     })
     runStartedAtRef.current = null
+    if (traceId && answerId) {
+      void loadTraceForAnswer(answerId, traceId)
+    }
+  }
+
+  function patchAnswerById(
+    answerId: string,
+    mutator: (
+      it: Extract<TimelineItem, { kind: 'answer' }>,
+    ) => TimelineItem,
+  ) {
+    setConversations((prev) =>
+      prev.map((c) => ({
+        ...c,
+        items: c.items.map((it) =>
+          it.id === answerId && it.kind === 'answer' ? mutator(it) : it,
+        ),
+      })),
+    )
+  }
+
+  async function loadTraceForAnswer(answerId: string, traceId: string) {
+    try {
+      const view = await fetchTrace(settings, traceId)
+      patchAnswerById(answerId, (it) => ({
+        ...it,
+        trace: view,
+        traceLoading: false,
+        traceError: undefined,
+      }))
+    } catch {
+      // 静默失败：展开时显示「暂无链路数据」
+      patchAnswerById(answerId, (it) => ({
+        ...it,
+        trace: null,
+        traceLoading: false,
+        traceError: undefined,
+      }))
+    }
+  }
+
+  function toggleTrace(conversationId: string, answerId: string) {
+    patchItems(conversationId, (items) =>
+      items.map((it) => {
+        if (it.id !== answerId || it.kind !== 'answer') return it
+        const open = !it.traceOpen
+        // 展开且尚无树时强制重拉（含上次卡住的 loading）
+        if (open && !it.trace && it.traceId) {
+          void loadTraceForAnswer(answerId, it.traceId)
+          return { ...it, traceOpen: true, traceLoading: true }
+        }
+        return { ...it, traceOpen: open }
+      }),
+    )
   }
 
   async function handleStreamEvents(
@@ -202,6 +272,7 @@ export default function App() {
     if (event === 'meta') {
       const meta = readMeta(data)
       if (meta.taskId) setTaskId(meta.taskId)
+      if (meta.traceId) lastTraceIdRef.current = meta.traceId
       runStartedAtRef.current = Date.now()
       if (meta.conversationId && meta.conversationId !== cid) {
         streamConvIdRef.current = meta.conversationId
@@ -255,6 +326,7 @@ export default function App() {
     setBusy(true)
     setError(null)
     streamConvIdRef.current = conversationId
+    lastTraceIdRef.current = null
     runStartedAtRef.current = Date.now()
     const controller = new AbortController()
     abortRef.current = controller
@@ -620,7 +692,36 @@ export default function App() {
                               {formatDuration(item.elapsedMs)}
                             </span>
                           ) : null}
+                          {item.totalTokens != null ? (
+                            <span
+                              className="elapsed tokens"
+                              title={`输入 ${item.promptTokens ?? '-'} · 输出 ${item.completionTokens ?? '-'} · 合计 ${item.totalTokens}`}
+                            >
+                              {formatTokens(item.totalTokens)} tok
+                            </span>
+                          ) : null}
+                          {item.traceId ? (
+                            <button
+                              type="button"
+                              className="icon-btn"
+                              title="查看链路"
+                              aria-label="查看链路"
+                              onClick={() => toggleTrace(active.id, item.id)}
+                            >
+                              <BranchIcon />
+                            </button>
+                          ) : null}
                         </div>
+                        {item.traceId ? (
+                          <TraceTree
+                            traceId={item.traceId}
+                            trace={item.trace}
+                            loading={item.traceLoading}
+                            error={item.traceError}
+                            open={Boolean(item.traceOpen)}
+                            onToggle={() => toggleTrace(active.id, item.id)}
+                          />
+                        ) : null}
                       </div>
                     )
                   }
