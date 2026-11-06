@@ -10,6 +10,8 @@ import {
 } from '../lib/api'
 import { formatTokens } from '../lib/format'
 import type { Me, McpServerView, Settings } from '../lib/types'
+import { AppRailBrand } from './AppRailBrand'
+import { AppTopUser } from './AppTopUser'
 
 type Section = 'overview' | 'mcp' | 'keys'
 
@@ -20,11 +22,6 @@ type Props = {
   onProjectChange: (projectId: string) => void
   onBackToChat: () => void
   onLogout: () => void
-}
-
-function initials(email: string): string {
-  const local = email.split('@')[0] || 'U'
-  return local.slice(0, 1).toUpperCase()
 }
 
 function MetricCard({
@@ -190,16 +187,26 @@ export function ConsolePage({
   return (
     <div className="admin-shell">
       <aside className="admin-rail">
-        <div className="admin-brand">
-          <div className="admin-logo">A</div>
-          <div>
-            <div className="admin-brand-title">Agent Gateway</div>
-            <div className="admin-brand-sub">Project Console</div>
-          </div>
-        </div>
+        <AppRailBrand subtitle="Project Console" />
 
         <div className="admin-nav-group">
           <div className="admin-nav-label">导航</div>
+          <button type="button" className="admin-nav-item" onClick={onBackToChat}>
+            <span className="admin-nav-ico" aria-hidden>
+              ✎
+            </span>
+            对话
+          </button>
+          <button type="button" className="admin-nav-item active">
+            <span className="admin-nav-ico" aria-hidden>
+              ▦
+            </span>
+            控制台
+          </button>
+        </div>
+
+        <div className="admin-nav-group">
+          <div className="admin-nav-label">控制台</div>
           <button
             type="button"
             className={`admin-nav-item${section === 'overview' ? ' active' : ''}`}
@@ -249,12 +256,6 @@ export function ConsolePage({
             </select>
           </div>
         </div>
-
-        <div className="admin-rail-foot">
-          <button type="button" className="admin-ghost" onClick={onBackToChat}>
-            ← 返回对话
-          </button>
-        </div>
       </aside>
 
       <div className="admin-main">
@@ -262,31 +263,30 @@ export function ConsolePage({
           <div className="admin-crumb">
             <span>首页</span>
             <span>/</span>
+            <span>控制台</span>
+            <span>/</span>
             <span>{sectionTitle}</span>
           </div>
-          <div className="admin-top-actions">
-            <button type="button" className="admin-chip" onClick={onBackToChat}>
-              返回对话
-            </button>
-            <button
-              type="button"
-              className="admin-icon-btn"
-              aria-label="刷新"
-              disabled={busy || loading}
-              onClick={() => void reload()}
-            >
-              ↻
-            </button>
-            <div className="admin-user">
-              <span className="admin-avatar">{initials(me.email)}</span>
-              <div className="admin-user-meta">
-                <strong>{me.email}</strong>
-                <button type="button" onClick={onLogout}>
-                  退出
+          <AppTopUser
+            email={me.email}
+            onLogout={onLogout}
+            extra={
+              <>
+                <button type="button" className="admin-chip" onClick={onBackToChat}>
+                  返回对话
                 </button>
-              </div>
-            </div>
-          </div>
+                <button
+                  type="button"
+                  className="admin-icon-btn"
+                  aria-label="刷新"
+                  disabled={busy || loading}
+                  onClick={() => void reload()}
+                >
+                  ↻
+                </button>
+              </>
+            }
+          />
         </header>
 
         <div className="admin-content">

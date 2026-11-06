@@ -24,6 +24,8 @@ import {
   saveSettings,
 } from './lib/storage'
 import { mapToolStatus, parseDonePayload, parseToolPayload } from './lib/toolEvent'
+import { AppRailBrand } from './components/AppRailBrand'
+import { AppTopUser } from './components/AppTopUser'
 import { ConsolePage } from './components/ConsolePage'
 import { BranchIcon, CheckIcon, ClockIcon, CopyIcon, RefreshIcon } from './components/Icons'
 import { LoginPage } from './components/LoginPage'
@@ -639,6 +641,13 @@ export default function App() {
     )
   }
 
+  function handleLogout() {
+    void logoutUser(settings).finally(() => {
+      setMe(null)
+      setMode('chat')
+    })
+  }
+
   if (mode === 'console') {
     return (
       <ConsolePage
@@ -649,87 +658,61 @@ export default function App() {
           setSettings((s) => ({ ...s, projectId }))
         }
         onBackToChat={() => setMode('chat')}
-        onLogout={() => {
-          void logoutUser(settings).finally(() => {
-            setMe(null)
-            setMode('chat')
-          })
-        }}
+        onLogout={handleLogout}
       />
     )
   }
 
   return (
-    <div className="app shell">
-      <header className="topbar">
-        <div className="topbar-brand">
-          <img src="/mark.svg" alt="" />
-          <strong>Agent Gateway</strong>
-        </div>
-        <nav className="mode-nav">
-          <button
-            type="button"
-            className="active"
-            onClick={() => setMode('chat')}
-          >
+    <div className="admin-shell chat-shell">
+      <aside className="admin-rail">
+        <AppRailBrand subtitle="Chat Studio" />
+
+        <div className="admin-nav-group">
+          <div className="admin-nav-label">导航</div>
+          <button type="button" className="admin-nav-item active">
+            <span className="admin-nav-ico" aria-hidden>
+              ✎
+            </span>
             对话
           </button>
-          <button type="button" onClick={() => setMode('console')}>
-            控制台
-          </button>
-        </nav>
-        <div className="topbar-right">
-          <select
-            aria-label="当前项目"
-            value={settings.projectId}
-            onChange={(e) =>
-              setSettings((s) => ({ ...s, projectId: e.target.value }))
-            }
-          >
-            {me.projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.role})
-              </option>
-            ))}
-          </select>
-          <span className="topbar-email">{me.email}</span>
           <button
             type="button"
-            className="btn-text"
-            onClick={() => {
-              void logoutUser(settings).finally(() => {
-                setMe(null)
-                setMode('chat')
-              })
-            }}
+            className="admin-nav-item"
+            onClick={() => setMode('console')}
           >
-            退出
+            <span className="admin-nav-ico" aria-hidden>
+              ▦
+            </span>
+            控制台
           </button>
         </div>
-      </header>
 
-      <aside className="sidebar">
-        <button type="button" className="btn btn-new" onClick={newChat}>
-          + 新建对话
-        </button>
-        <div className="conv-list">
-          {conversations.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={`conv-item${c.id === activeId ? ' active' : ''}`}
-              onClick={() => {
-                setActiveId(c.id)
-                setError(null)
-              }}
-            >
-              <span className="title">{c.title}</span>
-              <span className="meta">
-                {new Date(c.updatedAt).toLocaleString()}
-              </span>
-            </button>
-          ))}
+        <div className="admin-nav-group rail-scroll">
+          <div className="admin-nav-label">会话</div>
+          <button type="button" className="admin-primary rail-new" onClick={newChat}>
+            + 新建对话
+          </button>
+          <div className="conv-list">
+            {conversations.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`conv-item${c.id === activeId ? ' active' : ''}`}
+                onClick={() => {
+                  setActiveId(c.id)
+                  setError(null)
+                }}
+              >
+                <span className="title">{c.title}</span>
+                <span className="meta">
+                  {new Date(c.updatedAt).toLocaleString()}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
+
         <ObservePanel
           usage={usage}
           audit={audit}
@@ -743,52 +726,94 @@ export default function App() {
           }
           onRefresh={() => void refreshObserve()}
         />
-        <div className="sidebar-foot">
+
+        <div className="admin-nav-group">
+          <div className="admin-nav-label">设置</div>
+          <div className="admin-project-box">
+            <label htmlFor="chat-project">当前项目</label>
+            <select
+              id="chat-project"
+              value={settings.projectId}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, projectId: e.target.value }))
+              }
+            >
+              {me.projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.role})
+                </option>
+              ))}
+            </select>
+          </div>
           <button
             type="button"
-            className="btn-text"
+            className="admin-ghost"
             onClick={() => setDebugOpen((v) => !v)}
           >
             {debugOpen ? '收起调试' : '调试选项'}
           </button>
           {debugOpen ? (
-            <>
-              <div className="field">
-                <label htmlFor="apiKey">RUNTIME API Key（可选）</label>
-                <input
-                  id="apiKey"
-                  type="password"
-                  autoComplete="off"
-                  placeholder="sk_..."
-                  value={settings.apiKey}
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, apiKey: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="baseUrl">API Base（可空=走 Vite 代理）</label>
-                <input
-                  id="baseUrl"
-                  placeholder="http://127.0.0.1:8080"
-                  value={settings.baseUrl}
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, baseUrl: e.target.value }))
-                  }
-                />
-              </div>
-            </>
+            <div className="admin-project-box debug-fields">
+              <label htmlFor="apiKey">RUNTIME API Key（可选）</label>
+              <input
+                id="apiKey"
+                type="password"
+                autoComplete="off"
+                placeholder="sk_..."
+                value={settings.apiKey}
+                onChange={(e) =>
+                  setSettings((s) => ({ ...s, apiKey: e.target.value }))
+                }
+              />
+              <label htmlFor="baseUrl">API Base</label>
+              <input
+                id="baseUrl"
+                placeholder="http://127.0.0.1:8080"
+                value={settings.baseUrl}
+                onChange={(e) =>
+                  setSettings((s) => ({ ...s, baseUrl: e.target.value }))
+                }
+              />
+            </div>
           ) : null}
         </div>
       </aside>
 
-      <main className="main">
+      <div className="admin-main">
+        <header className="admin-top">
+          <div className="admin-crumb">
+            <span>首页</span>
+            <span>/</span>
+            <span>对话</span>
+            {currentProject ? (
+              <>
+                <span>/</span>
+                <span>{currentProject.name}</span>
+              </>
+            ) : null}
+          </div>
+          <AppTopUser
+            email={me.email}
+            onLogout={handleLogout}
+            extra={
+              <button
+                type="button"
+                className="admin-chip"
+                onClick={() => setMode('console')}
+              >
+                打开控制台
+              </button>
+            }
+          />
+        </header>
+
+        <div className="chat-main">
         {error ? <div className="banner">{error}</div> : null}
 
         {isEmpty ? (
           <div className="empty">
             <div className="hero-mark">
-              <img src="/mark.svg" alt="" />
+              <div className="admin-logo hero-logo">A</div>
               <h1>Agent Gateway</h1>
             </div>
             <div className="composer-shell">
@@ -1090,7 +1115,8 @@ export default function App() {
             </div>
           </>
         )}
-      </main>
+        </div>
+      </div>
     </div>
   )
 }

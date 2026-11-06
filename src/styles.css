@@ -1,14 +1,14 @@
 :root {
-  --bg: #f4f6f5;
+  --bg: #f3f5f9;
   --surface: #ffffff;
-  --ink: #14201c;
-  --muted: #5c6b66;
-  --accent: #0f766e;
-  --accent-soft: #d9f3ef;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --accent: #5b5ce2;
+  --accent-soft: #ecebff;
   --danger: #b42318;
-  --line: #d8e0dc;
-  --sidebar: #eef2f0;
-  --shadow: 0 10px 40px rgba(20, 32, 28, 0.08);
+  --line: #e6ebf2;
+  --sidebar: #151a2a;
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
   --radius: 18px;
   --font-display: 'Sora', sans-serif;
   --font-body: 'Source Sans 3', sans-serif;
@@ -54,7 +54,7 @@ textarea {
   gap: 12px;
   padding: 16px 14px;
   background: var(--sidebar);
-  border-right: 1px solid var(--line);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   min-height: 0;
   overflow: hidden;
 }
@@ -136,12 +136,19 @@ textarea {
   border-radius: 12px;
   padding: 10px 12px;
   cursor: pointer;
-  color: var(--ink);
+  color: #c4cbdf;
+  width: 100%;
 }
 
-.conv-item:hover,
+.conv-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
 .conv-item.active {
-  background: rgba(15, 118, 110, 0.1);
+  background: rgba(91, 92, 226, 0.22);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(139, 140, 245, 0.25);
 }
 
 .conv-item .title {
@@ -156,7 +163,7 @@ textarea {
   display: block;
   margin-top: 2px;
   font-size: 0.75rem;
-  color: var(--muted);
+  color: #8b93ad;
 }
 
 .sidebar-foot {
@@ -169,15 +176,16 @@ textarea {
 
 .observe-panel {
   flex: 0 0 auto;
-  max-height: 42%;
+  max-height: 38%;
   overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin: 0 0.2rem;
 }
 
 .observe-head {
@@ -187,12 +195,13 @@ textarea {
   font-family: var(--font-display);
   font-size: 0.82rem;
   font-weight: 600;
+  color: #e8ecf8;
 }
 
 .observe-refresh {
   border: none;
   background: transparent;
-  color: var(--accent);
+  color: #a5b4fc;
   font-size: 0.75rem;
   cursor: pointer;
   padding: 2px 4px;
@@ -205,7 +214,7 @@ textarea {
 
 .observe-error {
   font-size: 0.72rem;
-  color: var(--danger);
+  color: #fca5a5;
 }
 
 .observe-section {
@@ -216,21 +225,21 @@ textarea {
 
 .observe-label {
   font-size: 0.7rem;
-  color: var(--muted);
+  color: #8b93ad;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .observe-empty {
   font-size: 0.75rem;
-  color: var(--muted);
+  color: #8b93ad;
 }
 
 .quota-line {
   font-size: 0.75rem;
   font-family: var(--font-mono);
-  color: var(--ink);
-  background: var(--bg);
+  color: #e8ecf8;
+  background: rgba(0, 0, 0, 0.22);
   border-radius: 8px;
   padding: 6px 8px;
 }
@@ -245,7 +254,7 @@ textarea {
 }
 
 .usage-grid li {
-  background: var(--bg);
+  background: rgba(0, 0, 0, 0.22);
   border-radius: 8px;
   padding: 6px 8px;
   display: flex;
@@ -255,13 +264,14 @@ textarea {
 
 .usage-name {
   font-size: 0.68rem;
-  color: var(--muted);
+  color: #8b93ad;
 }
 
 .usage-val {
   font-family: var(--font-mono);
   font-size: 0.85rem;
   font-weight: 600;
+  color: #e8ecf8;
 }
 
 .audit-list {
@@ -280,7 +290,7 @@ textarea {
   flex-direction: column;
   gap: 1px;
   padding: 4px 2px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .audit-list li:last-child {
@@ -290,11 +300,40 @@ textarea {
 .audit-type {
   font-size: 0.75rem;
   font-weight: 600;
+  color: #e8ecf8;
 }
 
 .audit-time {
   font-size: 0.68rem;
-  color: var(--muted);
+  color: #8b93ad;
+}
+
+.scope-toggle {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0 0.15rem 0.15rem;
+}
+
+.scope-toggle button {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #8b93ad;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.scope-toggle button.active {
+  background: rgba(91, 92, 226, 0.28);
+  color: #fff;
+  border-color: transparent;
+}
+
+.scope-hint {
+  padding: 0 0.15rem 0.15rem;
+  font-size: 0.78rem;
+  color: #8b93ad;
 }
 
 .field label {
@@ -399,15 +438,16 @@ textarea {
   height: 40px;
   border-radius: 50%;
   border: none;
-  background: var(--ink);
+  background: linear-gradient(135deg, #6d6ef0, #4f46e5);
   color: #fff;
   display: grid;
   place-items: center;
   cursor: pointer;
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.28);
 }
 
 .send-disc:hover {
-  background: var(--accent);
+  filter: brightness(1.06);
 }
 
 .send-disc:disabled {
@@ -481,6 +521,7 @@ textarea {
   align-self: flex-end;
   max-width: min(560px, 92%);
   background: var(--accent-soft);
+  color: #312e81;
   border-radius: 16px 16px 4px 16px;
   padding: 12px 14px;
   white-space: pre-wrap;
@@ -893,94 +934,14 @@ textarea {
   }
 }
 
-/* —— Auth / Console shell —— */
-.app.shell {
-  grid-template-rows: auto 1fr;
-  grid-template-columns: 280px 1fr;
-}
-
-.app.shell > .topbar {
-  grid-column: 1 / -1;
-}
-
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.65rem 1.1rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-}
-
-.topbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-display);
-}
-
-.topbar-brand img {
-  width: 22px;
-  height: 22px;
-}
-
-.mode-nav {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.mode-nav button,
-.scope-toggle button {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  cursor: pointer;
-}
-
-.mode-nav button.active,
-.scope-toggle button.active {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: transparent;
-}
-
-.topbar-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.topbar-right select {
-  max-width: 220px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.35rem 0.55rem;
-  background: var(--bg);
-}
-
-.topbar-email {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.btn-text {
-  border: none;
-  background: transparent;
-  color: var(--accent);
-  cursor: pointer;
-  padding: 0.25rem 0.4rem;
-}
-
+/* —— Auth —— */
 .auth-page {
   min-height: 100%;
   display: grid;
   place-items: center;
   background:
-    radial-gradient(ellipse at 20% 10%, #d9f3ef 0%, transparent 50%),
-    radial-gradient(ellipse at 90% 80%, #e8efe9 0%, transparent 45%),
+    radial-gradient(ellipse at 18% 12%, #e0e7ff 0%, transparent 48%),
+    radial-gradient(ellipse at 90% 80%, #f1f5f9 0%, transparent 45%),
     var(--bg);
 }
 
@@ -1002,12 +963,13 @@ textarea {
 
 .auth-primary {
   border: none;
-  background: var(--accent);
+  background: linear-gradient(135deg, #6d6ef0, #4f46e5);
   color: white;
   border-radius: 12px;
   padding: 0.7rem 1rem;
   cursor: pointer;
   font-weight: 600;
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.25);
 }
 
 .auth-primary:disabled {
@@ -1020,18 +982,6 @@ textarea {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-}
-
-.scope-toggle {
-  display: flex;
-  gap: 0.35rem;
-  padding: 0 0.75rem 0.5rem;
-}
-
-.scope-hint {
-  padding: 0 0.75rem 0.5rem;
-  font-size: 0.78rem;
-  color: var(--muted);
 }
 
 /* —— Admin console (inspired by Ragent Knowledge Console) —— */
@@ -1058,9 +1008,68 @@ textarea {
   color: #d7dcec;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0.95rem;
   padding: 1.1rem 0.9rem;
   min-height: 0;
+  overflow: auto;
+}
+
+.chat-shell .admin-rail {
+  overflow: hidden;
+}
+
+.chat-shell .rail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-shell .conv-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.chat-shell .rail-new {
+  width: 100%;
+  margin-bottom: 0.35rem;
+  box-shadow: none;
+}
+
+.chat-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--admin-bg);
+}
+
+.chat-main .banner {
+  margin: 0.75rem 1.25rem 0;
+}
+
+.hero-logo {
+  width: 42px;
+  height: 42px;
+  font-size: 1.15rem;
+}
+
+.admin-project-box.debug-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.admin-project-box.debug-fields input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--admin-rail-2);
+  color: #e8ecf8;
+  border-radius: 9px;
+  padding: 0.45rem 0.55rem;
 }
 
 .admin-brand {
