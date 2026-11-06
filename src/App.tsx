@@ -108,7 +108,8 @@ export default function App() {
     setSettings((s) => {
       const stillValid = next.projects.some((p) => p.id === s.projectId)
       const projectId = stillValid ? s.projectId : (next.projects[0]?.id ?? '')
-      return { ...s, projectId }
+      // 登录后清掉调试 Key，避免与会话抢鉴权
+      return { ...s, projectId, apiKey: '' }
     })
   }
 
@@ -638,6 +639,26 @@ export default function App() {
     )
   }
 
+  if (mode === 'console') {
+    return (
+      <ConsolePage
+        me={me}
+        settings={settings}
+        isOwner={isOwner}
+        onProjectChange={(projectId) =>
+          setSettings((s) => ({ ...s, projectId }))
+        }
+        onBackToChat={() => setMode('chat')}
+        onLogout={() => {
+          void logoutUser(settings).finally(() => {
+            setMe(null)
+            setMode('chat')
+          })
+        }}
+      />
+    )
+  }
+
   return (
     <div className="app shell">
       <header className="topbar">
@@ -648,16 +669,12 @@ export default function App() {
         <nav className="mode-nav">
           <button
             type="button"
-            className={mode === 'chat' ? 'active' : ''}
+            className="active"
             onClick={() => setMode('chat')}
           >
             对话
           </button>
-          <button
-            type="button"
-            className={mode === 'console' ? 'active' : ''}
-            onClick={() => setMode('console')}
-          >
+          <button type="button" onClick={() => setMode('console')}>
             控制台
           </button>
         </nav>
@@ -691,12 +708,6 @@ export default function App() {
         </div>
       </header>
 
-      {mode === 'console' ? (
-        <main className="main console-main">
-          <ConsolePage me={me} settings={settings} isOwner={isOwner} />
-        </main>
-      ) : (
-        <>
       <aside className="sidebar">
         <button type="button" className="btn btn-new" onClick={newChat}>
           + 新建对话
@@ -1080,8 +1091,6 @@ export default function App() {
           </>
         )}
       </main>
-        </>
-      )}
     </div>
   )
 }

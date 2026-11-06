@@ -20,7 +20,8 @@ export function authHeaders(settings: Settings, withProject = true): HeadersInit
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
-  if (settings.apiKey.trim()) {
+  // 已选项目时走 Cookie 会话，避免本地残留 Key 抢先绑定到错误租户
+  if (settings.apiKey.trim() && !settings.projectId.trim()) {
     headers.Authorization = `Bearer ${settings.apiKey.trim()}`
   }
   if (withProject && settings.projectId.trim()) {
